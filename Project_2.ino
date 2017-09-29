@@ -1,3 +1,9 @@
+/*
+ * Steenbrink
+ * 27-09-2017
+ * "Automated check-out project"
+ */
+
 //include libraries
 #include <RFID.h>
 #include <SPI.h>
@@ -10,106 +16,101 @@
 RFID rfid(SS_PIN,RST_PIN);
 
 //register variables
-int led = 8;    //led pin
-int id_scanned[5];    //the scanned serialnumber
-boolean already_scanned = false;    //check if already scanned
-boolean button_removed;     //check if button is removed
-boolean pay_button_pressed = false;   //check if payment button is pressed
-int total_price = 0;    //total price of all products scanned
-int db[][7] = { {132241131091173, 10000,100}, {101182118008173, 5000,200} };   //the database with all the products [id, price(ct.), amount]
-int scanned_items[50][3][5];    //the scanned items
-int tot_scanned_items = 0;    //the total of the scanned items
+String serial;   //storage of the scanned serial code
 
-//setup
+boolean already_bought = false;   //check to see if item was allready bought
+
+String product_serial[] = {"101182118008173", "132241131091173", "227179198250108"};    //the database with all the serialcodes of the tags
+int product_data[][2] = { {100, 50}, {50, 20}, {25, 3} };   //the price(€ct) and amount of products corresponding to above array
+int product_amount = 3;   //the amount of items in the array above
+
+String bought_product[100];     //all the serialcodes of the bought products
+int data_bought[100][2];   //the price(€ct) and amount of products bought corresponding to the above array
+int bought_products = 0;    //the amount of bought products
+
+int total = 0;    //the total price
+
 void setup() {
+  // register lcd, sixteen characters across 2 lines
   
-    Serial.begin(9600);
-    SPI.begin();
-    rfid.init();
+  Serial.begin(9600);
 
-    //registers outputs & sets them to 0
-    pinMode(led, OUTPUT);
-    digitalWrite(led, LOW);
+  //init libraries for reader
+  SPI.begin();
+  rfid.init();
 }
 
 void loop() {
-  
-    //Check for scan
+    // if a card is detected
     if(rfid.isCard()){
-        Serial.println("We scanned an item!");
-        checkForMatch();
-    
-  if(pay_button_pressed){
-    initPayment();
-    }
-  }
-}
-
-void checkForMatch(){
-  for(int x = 0; x < sizeof(db[])-2; x++){
-              for(int y = 0; y < sizeof(rfid.id_scanned); y++ ){
-                  if(rfid.id_scanned[y] != cards[x][y]) {
-                      access = false;
-                      break;
-                  } else {
-                      access = true;
-                  }
-              }
-              if(access) break;
-            }
-}
-
-void match(){
-    /*
-       * If there is a match:
-       *  if item is allready in the scanned items add 1
-       *  else make a new item in the scanned_items array for the newly scanned item
-       */
-  for(int i = 0; i < sizeof(db), i++;){
-      if(id_scanned == db[i][0]){
-        Serial.println("Scanned item recognized");
-        if(scanned_items > 0){
-          for (int j = 0; j < sizeof(scanned_items); j++){
-            if(id_scanned == scanned_items[j][0]){
-              scanned_items[6]++;
-              already_scanned = true;
-              break;
-              }
-            }
-          }else if (scanned_items == 0 || !already_scanned){
-          for(int k = 0; k < sizeof(scanned_items){
-            }
-          }
-          scanned_items[tot_scanned_items] = db[i];
-          scanned_items[tot_scanned_items][2][0] = 1;
-          id_scanned = {0,0,0,0,0};
-          tot_scanned_items++;
-          allready_scanned = false;
-          }
-        db[i][2]--;
-        //calculate the new price
-        for(int l = 0; l < sizeof(scanned_items); l++;){
-          
+        //if we can read the card
+        if(rfid.readCardSerial()){
+            Serial.println("Card registered");
+            registerSerial();
+            Serial.println("Serial = " + serial);
+            checkSerial();
         }
-    break;
     }
 }
 
-void magnet(){
-  //power magnet
-  while true{
-    if (button_removed){
-      break;
+/*
+ * First clears the current serial
+ * Then adds the 5 3numbercodes together to one code
+ * if the code is smaller than 10 add 00 if smaller than 100 add 0 to keep the 3 numbers
+ */
+void registerSerial(){
+    serial = "";
+    for(int i = 0; i < 5; i++){
+        if(rfid.serNum[i] < 10){
+            serial = serial + "00"+rfid.serNum[i];
+        }else if (rfid.serNum[i] < 100){
+            serial = serial + "0"+rfid.serNum[i];
+        }else{
+            serial = serial + rfid.serNum[i];
+        }
     }
-  }
 }
 
-void initPayment(){
-  //payment
-  //ask for receipt
-  if(payment_succesfull){
-    //open gate
-    total_price = 0;
-  }
+void checkSerial(){
+    for(int j = 0; j < product_amount; j++){
+        if(product_serial[j] == serial){
+            Serial.println("check done");
+            handleProduct(j);
+            break;
+        }
+    }
+}
+
+void handleProduct(int number_in_array){
+    Serial.println("handle");
+    
+    if(bought_products != 0){
+        Serial.println("bought");
+        /*
+        for(int k = 0; k < bought_products; k++){
+            if(bought_product[k] == serial){
+                data_bought[k][1]++;
+                product_data[number_in_array][1]--;
+                already_bought = true;
+                break;
+            }
+        }
+        */
+    }else if (bought_products == 0 || !already_bought ){
+        bought_product[bought_products] = product_serial[number_in_array];
+        int temp = product_data[number_in_array][0];
+        data_bought[bought_products][0] = temp;
+        data_bought[bought_products][1] = 1;
+        product_data[number_in_array][1]--;
+        bought_products++;
+    }
+    calculatePrice();
+}
+
+void calculatePrice(){
+    for(int m = 0; m < bought_products; m++){
+        total += data_bought[m][0]*data_bought[m][1];
+    }
+    Serial.println("Totaalprijs: €"+String(total));
 }
 
