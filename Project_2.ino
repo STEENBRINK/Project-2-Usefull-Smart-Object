@@ -108,7 +108,8 @@ void checkSerial(int kind){
     if(kind == 0){
         for(int j = 0; j < PRODUCT_AMOUNT; j++){
             if(memcmp(product_serial[j], rfid.serNum, 5) == 0){
-                Serial.println("Kind 0");
+                Serial.println(j);
+                //Serial.println("Kind 0");
                 handleProduct(j);
                 recognized = true;
                 break;
@@ -117,7 +118,7 @@ void checkSerial(int kind){
     }else if (kind == 1){
         for(int j = 0; j < CUSTOMER_AMOUNT; j++){
             if(memcmp(customers[j], rfid.serNum, 5) == 0){
-                Serial.println("Kind 1");
+                //Serial.println("Kind 1");
                 payment_succes = true;
                 recognized = true;
                 break;
@@ -126,7 +127,7 @@ void checkSerial(int kind){
     }else if (kind == 2){
         for(int j = 0; j < GUARDS; j++){
             if(memcmp(security[j], rfid.serNum, 5) == 0){
-                Serial.println("Kind 2");
+                //Serial.println("Kind 2");
                 valid = true;
                 recognized = true;
                 break;
@@ -148,6 +149,7 @@ void checkSerial(int kind){
  */
 void handleProduct(int number_in_array){
     already_bought = false;
+    Serial.println(number_in_array);
     
     if(bought_products != 0){
         for(int k = 0; k < bought_products; k++){
@@ -166,14 +168,14 @@ void handleProduct(int number_in_array){
     }
     if (bought_products == 0 || !already_bought){
         memcpy(bought_product[bought_products], product_serial[number_in_array], 5);
-        data_bought[bought_products][0] = product_data[bought_products][0];
+        data_bought[bought_products][0] = product_data[number_in_array][0];
         data_bought[bought_products][1] = 1;
         product_data[number_in_array][1]--;
 
         //print the scanned product on the lcd
         lcd.clear();
         lcd.setCursor(0,1);
-        lcd.print(product_names[bought_products] + " x " + String(data_bought[bought_products][1]));
+        lcd.print(product_names[number_in_array] + " x 1");
         bought_products++;
     }
     calculatePrice();
