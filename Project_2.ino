@@ -18,9 +18,12 @@ LiquidCrystal_I2C lcd(0x3F, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 #define RST_PIN 9
 #define SERVO_PIN 2
 #define BUTTON_PIN 3
+#define RESET_PIN 6
 
 //the set amount of different items available
 #define PRODUCT_AMOUNT 3
+#define CUSTOMER_AMOUNT 1
+#define GUARDS 1
 
 //register the rfid reader
 RFID rfid(SS_PIN,RST_PIN);
@@ -28,15 +31,20 @@ RFID rfid(SS_PIN,RST_PIN);
 //register variables
 unsigned char product_serial[PRODUCT_AMOUNT][5] = { {101, 182, 118, 8, 173}, {132, 241, 131, 91, 173}, {227, 179, 198, 250, 108} };    //the database with all the serialcodes of the tags
 int product_data[PRODUCT_AMOUNT][2] = { {100, 50}, {50, 20}, {25, 3} };   //the price(€ct) and amount of products corresponding to above array
-String product_names[PRODUCT_AMOUNT] = {"JAS    ", "BROEK  ", "T-SHIRT"};   //the names of the products
+String product_names[PRODUCT_AMOUNT] = {"BADPAK ", "BROEK  ", "T-SHIRT"};   //the names of the products
 
 unsigned char bought_product[PRODUCT_AMOUNT][5];     //all the serialcodes of the bought products, uses exaclty 100 bytes
 int data_bought[PRODUCT_AMOUNT][2];   //the price(€ct) and amount of products bought corresponding to the above array, 160 bytes
 int bought_products = 0;    //the amount of bought products
 
+unsigned char customers[CUSTOMER_AMOUNT][5] = { {129, 33, 22, 174, 24} };
+unsigned char security[GUARDS][5] = { {35, 5, 198, 250, 26} };
+boolean payment_succes = false;
+
 int total = 0;    //the total price
 boolean already_bought = false;   //check for handleProduct
 boolean recognized = false;   //check for checkSerial
+boolean valid = false;
 
 void setup() {
     //start the serial monitor
@@ -58,6 +66,7 @@ void setup() {
     digitalWrite(SERVO_PIN, LOW);
 
     // Print the welcome text on the LCD screen
+    lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("WELCOME");
     lcd.setCursor(0,1);
@@ -70,7 +79,7 @@ void loop() {
         //checks if the card is readable
         if(rfid.readCardSerial()){
             Serial.println("Card registered");
-            checkSerial();
+            checkSerial(0);
 
             //set the text on the lcd
             lcd.clear();
@@ -81,8 +90,10 @@ void loop() {
         }
     }
     //checks if the payment button is pressed
-    if(digitalRead(BUTTON_PIN)){
-        checkOut();
+    if(digitalRead(RESET_PIN)){
+        if(bought_products > 0){
+            checkOut();
+        }
     }
 }
 
@@ -92,12 +103,34 @@ void loop() {
  * compares the read 5 bytes to the database
  * if the read serial exists in the database execute handleProduct
  */
-void checkSerial(){
-    for(int j = 0; j < PRODUCT_AMOUNT; j++){
-        if(memcmp(product_serial[j], rfid.serNum, 5) == 0){
-            handleProduct(j);
-            recognized = true;
-            break;
+void checkSerial(int kind){
+    Serial.println("Kind: " + String(kind));
+    if(kind == 0){
+        for(int j = 0; j < PRODUCT_AMOUNT; j++){
+            if(memcmp(product_serial[j], rfid.serNum, 5) == 0){
+                Serial.println("Kind 0");
+                handleProduct(j);
+                recognized = true;
+                break;
+            }
+        }
+    }else if (kind == 1){
+        for(int j = 0; j < CUSTOMER_AMOUNT; j++){
+            if(memcmp(customers[j], rfid.serNum, 5) == 0){
+                Serial.println("Kind 1");
+                payment_succes = true;
+                recognized = true;
+                break;
+            }
+        }
+    }else if (kind == 2){
+        for(int j = 0; j < GUARDS; j++){
+            if(memcmp(security[j], rfid.serNum, 5) == 0){
+                Serial.println("Kind 2");
+                valid = true;
+                recognized = true;
+                break;
+            }
         }
     }
     if(!recognized){
@@ -144,6 +177,7 @@ void handleProduct(int number_in_array){
         bought_products++;
     }
     calculatePrice();
+    delay(1000);
     magnetRead();
 }
 
@@ -171,7 +205,7 @@ void magnetRead(){
     lcd.print("REMOVE SAFETYPIN");
     while(true){
         if(digitalRead(BUTTON_PIN)){
-            while(digitalRead(BUTTON_PIN)){Serial.println("pressed");}
+            while(digitalRead(BUTTON_PIN)){int fill = 0;}
             break;
         }
     }
@@ -194,36 +228,88 @@ void checkOut(){
     lcd.print("PLEASE PAY");
 
     //check to see if the button is released
-    while(digitalRead(BUTTON_PIN)){Serial.println("pressed");}
+    while(digitalRead(BUTTON_PIN)){int fill = 0;}
 
     //handle payment
     while(true){
-        if(digitalRead(BUTTON_PIN)){
-            while(digitalRead(BUTTON_PIN)){Serial.println("pressed");}
-            Serial.println("Payment Succes");
-            lcd.setCursor(0,1);
-            lcd.print("PAYMENT SUCCES!");
-            break;
+        if(rfid.isCard()){
+            //checks if the card is readable
+            if(rfid.readCardSerial()){
+                Serial.println("Card registered");
+                checkSerial(1);
+                break;
+            }
         }
     }
-    
-    //print receipt
-    Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~");
-    for(int n = 0; n < bought_products; n++){
-        if(data_bought[n][0] == 100){
-            Serial.println(product_names[n] + " x " + data_bought[n][1] + " : $" + data_bought[n][0] + " = $" + (data_bought[n][0]*data_bought[n][1]));
-        }else{
-            Serial.println(product_names[n] + " x " + data_bought[n][1] + " : $" + data_bought[n][0] + "  = $" + (data_bought[n][0]*data_bought[n][1]));
+    if(payment_succes){
+        //print receipt
+        Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~");
+        for(int n = 0; n < bought_products; n++){
+            if(data_bought[n][0] == 100){
+                Serial.println(product_names[n] + " x " + data_bought[n][1] + " : $" + data_bought[n][0] + " = $" + (data_bought[n][0]*data_bought[n][1]));
+            }else{
+                Serial.println(product_names[n] + " x " + data_bought[n][1] + " : $" + data_bought[n][0] + "  = $" + (data_bought[n][0]*data_bought[n][1]));
+            }
+        }
+        Serial.println("TOTAAL = $"+String(total));
+        Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~");
+        
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("PLS TAKE RECEIPT");
+        lcd.setCursor(0,1);
+        lcd.print("THANK YOU");
+        
+        //open door
+        digitalWrite(SERVO_PIN, HIGH);
+        delay(5000);
+        digitalWrite(SERVO_PIN, LOW);
+
+        payment_succes = false;
+        reset();
+    }else{
+        Serial.print("Payment unsuccesfull, please send security");//set the text on the lcd
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("UNSUCCESFULL");
+        lcd.setCursor(0,1);
+        lcd.print("SECURITY CALLED");
+        while(true){
+            if(rfid.isCard()){
+                //checks if the card is readable
+                if(rfid.readCardSerial()){
+                    Serial.println("Card registered");
+                    checkSerial(2);
+                    if(valid){
+                        lcd.clear();
+                        lcd.setCursor(0,0);
+                        lcd.print("PRESS RESET");
+                        while(true){
+                            if(digitalRead(RESET_PIN)){
+                                while(digitalRead(RESET_PIN)){int fill = 0;}
+                                Serial.println("Reset Succes");
+                                lcd.clear();
+                                lcd.setCursor(0,0);
+                                lcd.print("RESET SUCCES!");
+                                lcd.setCursor(0,1);
+                                lcd.print("OPENING DOOR");
+                                delay(1000);
+                                reset();
+                                break;
+                            }
+                        }
+                        valid = false;
+                        Serial.println("BREAKING!!!!");
+                        break;
+                    }
+                }
+            }
         }
     }
-    Serial.println("TOTAAL = $"+String(total));
-    Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~");
-    
-    //open door
-    digitalWrite(SERVO_PIN, HIGH);
-    delay(5000);
-    digitalWrite(SERVO_PIN, LOW);
-    
+    delay(1000);
+}
+
+void reset(){
     //reset system
     total = 0;
     bought_products = 0;
@@ -234,5 +320,15 @@ void checkOut(){
         data_bought[o][0] = 0;
         data_bought[o][1] = 0;
     }
+
+    digitalWrite(SERVO_PIN, HIGH);
+    delay(5000);
+    digitalWrite(SERVO_PIN, LOW);
+    // Print the welcome text on the LCD screen
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("WELCOME");
+    lcd.setCursor(0,1);
+    lcd.print("SCAN PRODUCT");
 }
 
